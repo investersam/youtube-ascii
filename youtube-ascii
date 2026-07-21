@@ -162,8 +162,45 @@ def frame_to_ascii(frame_path, width=None):
     except Exception as e:
         return f"{RED}Error: {e}{RESET}"
 
+def play_from_cache(video_path):
+    """Play cached video"""
+    frames_dir = os.path.dirname(video_path) + '/frames'
+
+    if not os.path.exists(frames_dir):
+        print(f"{YELLOW}Converting to ASCII...{RESET}")
+        os.makedirs(frames_dir, exist_ok=True)
+        try:
+            subprocess.run(
+                ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
+                capture_output=True,
+                timeout=120
+            )
+        except Exception as e:
+            print(f"{RED}Error: {e}{RESET}")
+            return
+
+    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+    if not frames:
+        print(f"{RED}No frames found{RESET}")
+        return
+
+    print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
+    print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+    time.sleep(2)
+
+    try:
+        for i, frame in enumerate(frames):
+            print(CLEAR, end='')
+            frame_path = os.path.join(frames_dir, frame)
+            ascii_art = frame_to_ascii(frame_path)
+            print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
+            print(ascii_art)
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+
 def play_ascii_video(video):
-    """Play video as ASCII art"""
+    """Play video as ASCII art and cache it"""
     url = video.get('url', '')
     title = video.get('title', 'Video')
 
@@ -173,79 +210,152 @@ def play_ascii_video(video):
 
     print(f"\n{GREEN}▶ Downloading: {title}{RESET}\n")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = os.path.join(tmpdir, 'video.mp4')
-        frames_dir = os.path.join(tmpdir, 'frames')
-        os.makedirs(frames_dir, exist_ok=True)
+    # Create cache entry
+    cache_dir = get_cache_dir()
+    video_key = url.split('=')[-1][:11]
+    cache_path = os.path.join(cache_dir, video_key)
+    os.makedirs(cache_path, exist_ok=True)
 
-        # Download video
-        try:
-            result = subprocess.run(
-                ['yt-dlp', '-f', 'worst', '-o', video_path, url],
-                capture_output=True,
-                timeout=60
-            )
-            if result.returncode != 0:
-                print(f"{RED}Download failed{RESET}")
-                return
-        except Exception as e:
-            print(f"{RED}Download error: {e}{RESET}")
+    # Save metadata
+    meta_file = os.path.join(cache_path, 'metadata.txt')
+    with open(meta_file, 'w') as f:
+        f.write(title)
+
+    video_path = os.path.join(cache_path, 'video.mp4')
+    frames_dir = os.path.join(cache_path, 'frames')
+    os.makedirs(frames_dir, exist_ok=True)
+
+    # Download video
+    try:
+        result = subprocess.run(
+            ['yt-dlp', '-f', 'worst', '-o', video_path, url],
+            capture_output=True,
+            timeout=60
+        )
+        if result.returncode != 0:
+            print(f"{RED}Download failed{RESET}")
             return
+    except Exception as e:
+        print(f"{RED}Download error: {e}{RESET}")
+        return
 
-        # Extract frames
-        print(f"{YELLOW}🎬 Extracting frames...{RESET}")
-        try:
-            subprocess.run(
-                ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
-                capture_output=True,
-                timeout=120
-            )
-        except FileNotFoundError:
-            print(f"{RED}ffmpeg not found. Install with: sudo apt-get install ffmpeg python3-pil{RESET}")
-            return
+    # Extract frames
+    print(f"{YELLOW}🎬 Extracting frames...{RESET}")
+    try:
+        subprocess.run(
+            ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
+            capture_output=True,
+            timeout=120
+        )
+    except FileNotFoundError:
+        print(f"{RED}ffmpeg not found. Install with: sudo apt-get install ffmpeg python3-pil{RESET}")
+        return
 
-        # Play frames
-        frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
-        if not frames:
-            print(f"{RED}No frames extracted{RESET}")
-            return
+    # Play frames
+    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+    if not frames:
+        print(f"{RED}No frames extracted{RESET}")
+        return
 
-        print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
-        print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
-        time.sleep(2)
+    print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
+    print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+    time.sleep(2)
 
-        try:
-            for i, frame in enumerate(frames):
-                print(CLEAR, end='')
-                frame_path = os.path.join(frames_dir, frame)
-                ascii_art = frame_to_ascii(frame_path, width=120)
-                print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
-                print(ascii_art)
-                time.sleep(0.2)  # 5 fps
-        except KeyboardInterrupt:
-            print(f"\n{YELLOW}Playback stopped{RESET}")
+    try:
+        for i, frame in enumerate(frames):
+            print(CLEAR, end='')
+            frame_path = os.path.join(frames_dir, frame)
+            ascii_art = frame_to_ascii(frame_path)
+            print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
+            print(ascii_art)
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
 
-def main():
+def get_cache_dir():
+    """Get or create cache directory"""
+    cache_dir = os.path.expanduser('~/.youtube-ascii-cache')
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
+
+def list_cached_videos():
+    """List all cached videos"""
+    cache_dir = get_cache_dir()
+    cached = {}
+    for item in os.listdir(cache_dir):
+        item_path = os.path.join(cache_dir, item)
+        if os.path.isdir(item_path):
+            # Read metadata if it exists
+            meta_file = os.path.join(item_path, 'metadata.txt')
+            if os.path.exists(meta_file):
+                with open(meta_file, 'r') as f:
+                    title = f.read().strip()
+                cached[item] = title
+    return cached
+
+def show_main_menu():
+    """Show main menu"""
+    cached = list_cached_videos()
+
     print(f"\n{BOLD}{MAGENTA}╔════════════════════════════════════════╗{RESET}")
     print(f"{BOLD}{MAGENTA}║   {CYAN}YouTube ASCII Video Player{MAGENTA}   ║{RESET}")
     print(f"{BOLD}{MAGENTA}╚════════════════════════════════════════╝{RESET}\n")
 
+    if cached:
+        print(f"{GREEN}📹 Cached Videos:{RESET}\n")
+        for i, (key, title) in enumerate(cached.items(), 1):
+            print(f"{CYAN}{i}.{RESET} {title}")
+        print()
+
+    print(f"{YELLOW}s{RESET} - Search new video")
+    print(f"{YELLOW}c{RESET} - Clear cache")
+    if cached:
+        print(f"{YELLOW}1-{len(cached)}{RESET} - Play cached video")
+    print()
+
+    choice = input(f"{YELLOW}Choose option: {RESET}").strip().lower()
+    return choice, cached
+
+def main():
     if len(sys.argv) > 1:
         query = ' '.join(sys.argv[1:])
+        videos = search_youtube(query)
+        if not videos:
+            return
+        video = display_results(videos)
+        if video:
+            play_ascii_video(video)
     else:
-        query = input(f"{YELLOW}Search YouTube: {RESET}").strip()
+        while True:
+            choice, cached = show_main_menu()
 
-    if not query:
-        print(f"{RED}No search query provided{RESET}")
-        sys.exit(1)
-
-    videos = search_youtube(query)
-    if not videos:
-        return
-
-    video = display_results(videos)
-    if video:
-        play_ascii_video(video)
+            if choice == 's':
+                query = input(f"\n{YELLOW}Search YouTube: {RESET}").strip()
+                if query:
+                    videos = search_youtube(query)
+                    if videos:
+                        video = display_results(videos)
+                        if video:
+                            play_ascii_video(video)
+            elif choice == 'c':
+                import shutil
+                cache_dir = get_cache_dir()
+                shutil.rmtree(cache_dir)
+                os.makedirs(cache_dir, exist_ok=True)
+                print(f"{GREEN}✓ Cache cleared{RESET}")
+            elif choice.isdigit():
+                idx = int(choice)
+                cached_list = list(cached.items())
+                if 1 <= idx <= len(cached_list):
+                    video_key, title = cached_list[idx - 1]
+                    video_path = os.path.join(get_cache_dir(), video_key, 'video.mp4')
+                    if os.path.exists(video_path):
+                        print(f"\n{GREEN}▶ Playing: {title}{RESET}\n")
+                        play_from_cache(video_path)
+                else:
+                    print(f"{RED}Invalid choice{RESET}")
+            elif choice.lower() == 'q':
+                break
 
 if __name__ == '__main__':
     main()
