@@ -1,0 +1,241 @@
+#!/home/alvin/.venv/bin/python3
+import subprocess
+import sys
+import json
+import os
+import tempfile
+import time
+from pathlib import Path
+import shutil
+
+# Auto-install dependencies
+def check_and_install_deps():
+    """Check and install missing dependencies"""
+    # Check for ffmpeg
+    if not shutil.which('ffmpeg'):
+        print("Installing ffmpeg...")
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'ffmpeg'], check=False)
+
+    # Check for Pillow
+    try:
+        from PIL import Image
+    except ImportError:
+        print("Installing Pillow...")
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'pillow'], check=False)
+
+check_and_install_deps()
+
+# ANSI color codes
+BOLD = '\033[1m'
+CYAN = '\033[96m'
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+MAGENTA = '\033[95m'
+RESET = '\033[0m'
+CLEAR = '\033[2J\033[H'
+
+# ASCII chars from darkest to lightest
+ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
+ASCII_CHARS_COLORED = [
+    f'\033[91m@\033[0m',  # red
+    f'\033[92m#\033[0m',  # green
+    f'\033[93mS\033[0m',  # yellow
+    f'\033[94m%\033[0m',  # blue
+    f'\033[95m?\033[0m',  # magenta
+    f'\033[96m*\033[0m',  # cyan
+    f'\033[97m+\033[0m',  # white
+    f'\033[90m;\033[0m',  # gray
+    f'\033[90m:\033[0m',  # gray
+    f'\033[90m,\033[0m',  # gray
+    f'\033[90m.\033[0m',  # gray
+]
+
+def search_youtube(query):
+    """Search YouTube and return results"""
+    print(f"\n{YELLOW}🔍 Searching for: {query}{RESET}\n")
+    try:
+        result = subprocess.run(
+            ['yt-dlp', '-j', '--flat-playlist', f'ytsearch10:{query}'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            print(f"{RED}Error searching: {result.stderr}{RESET}")
+            return []
+
+        videos = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                try:
+                    videos.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        return videos
+    except Exception as e:
+        print(f"{RED}Search failed: {e}{RESET}")
+        return []
+
+def display_results(videos):
+    """Display search results with colors"""
+    if not videos:
+        print(f"{RED}No results found{RESET}")
+        return None
+
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+    for i, video in enumerate(videos, 1):
+        title = video.get('title', 'Unknown')
+        url = video.get('url', '')
+        duration = video.get('duration', 0)
+
+        if duration:
+            mins, secs = divmod(duration, 60)
+            duration_str = f"{int(mins)}:{int(secs):02d}"
+        else:
+            duration_str = "LIVE"
+
+        print(f"{GREEN}{i:2d}.{RESET} {BOLD}{title[:60]}{RESET}")
+        print(f"    {MAGENTA}Duration: {duration_str}{RESET} | {CYAN}{url}{RESET}\n")
+
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+    while True:
+        try:
+            choice = input(f"{YELLOW}Select video (1-{len(videos)}) or 'q' to quit: {RESET}").strip()
+            if choice.lower() == 'q':
+                return None
+            choice = int(choice)
+            if 1 <= choice <= len(videos):
+                return videos[choice - 1]
+            else:
+                print(f"{RED}Invalid choice{RESET}")
+        except ValueError:
+            print(f"{RED}Please enter a number{RESET}")
+
+def resize_image(image, new_width=100):
+    """Resize image for ASCII display"""
+    from PIL import Image
+    width, height = image.size
+    ratio = height / width / 1.65
+    new_height = int(new_width * ratio)
+    return image.resize((new_width, new_height))
+
+def grayscale(image):
+    """Convert to grayscale"""
+    return image.convert("L")
+
+def pixels_to_ascii(image):
+    """Convert grayscale pixels to ASCII"""
+    pixels = image.getdata()
+    ascii_str = ""
+    for pixel in pixels:
+        ascii_str += ASCII_CHARS_COLORED[pixel // 25]
+    return ascii_str
+
+def frame_to_ascii(frame_path, width=100):
+    """Convert a single frame to ASCII art"""
+    try:
+        from PIL import Image
+        image = Image.open(frame_path)
+        image = resize_image(image, width)
+        image = grayscale(image)
+        ascii_str = pixels_to_ascii(image)
+
+        img_width = image.width
+        ascii_str_len = len(ascii_str)
+        ascii_img = ""
+        for i in range(0, ascii_str_len, img_width):
+            ascii_img += ascii_str[i:i+img_width] + "\n"
+        return ascii_img
+    except Exception as e:
+        return f"{RED}Error: {e}{RESET}"
+
+def play_ascii_video(video):
+    """Play video as ASCII art"""
+    url = video.get('url', '')
+    title = video.get('title', 'Video')
+
+    if not url:
+        print(f"{RED}No URL found{RESET}")
+        return
+
+    print(f"\n{GREEN}▶ Downloading: {title}{RESET}\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_path = os.path.join(tmpdir, 'video.mp4')
+        frames_dir = os.path.join(tmpdir, 'frames')
+        os.makedirs(frames_dir, exist_ok=True)
+
+        # Download video
+        try:
+            result = subprocess.run(
+                ['yt-dlp', '-f', 'worst', '-o', video_path, url],
+                capture_output=True,
+                timeout=60
+            )
+            if result.returncode != 0:
+                print(f"{RED}Download failed{RESET}")
+                return
+        except Exception as e:
+            print(f"{RED}Download error: {e}{RESET}")
+            return
+
+        # Extract frames
+        print(f"{YELLOW}🎬 Extracting frames...{RESET}")
+        try:
+            subprocess.run(
+                ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
+                capture_output=True,
+                timeout=120
+            )
+        except FileNotFoundError:
+            print(f"{RED}ffmpeg not found. Install with: sudo apt-get install ffmpeg python3-pil{RESET}")
+            return
+
+        # Play frames
+        frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+        if not frames:
+            print(f"{RED}No frames extracted{RESET}")
+            return
+
+        print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
+        print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+        time.sleep(2)
+
+        try:
+            for i, frame in enumerate(frames):
+                print(CLEAR, end='')
+                frame_path = os.path.join(frames_dir, frame)
+                ascii_art = frame_to_ascii(frame_path, width=120)
+                print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
+                print(ascii_art)
+                time.sleep(0.2)  # 5 fps
+        except KeyboardInterrupt:
+            print(f"\n{YELLOW}Playback stopped{RESET}")
+
+def main():
+    print(f"\n{BOLD}{MAGENTA}╔════════════════════════════════════════╗{RESET}")
+    print(f"{BOLD}{MAGENTA}║   {CYAN}YouTube ASCII Video Player{MAGENTA}   ║{RESET}")
+    print(f"{BOLD}{MAGENTA}╚════════════════════════════════════════╝{RESET}\n")
+
+    if len(sys.argv) > 1:
+        query = ' '.join(sys.argv[1:])
+    else:
+        query = input(f"{YELLOW}Search YouTube: {RESET}").strip()
+
+    if not query:
+        print(f"{RED}No search query provided{RESET}")
+        sys.exit(1)
+
+    videos = search_youtube(query)
+    if not videos:
+        return
+
+    video = display_results(videos)
+    if video:
+        play_ascii_video(video)
+
+if __name__ == '__main__':
+    main()
