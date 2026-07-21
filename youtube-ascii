@@ -37,19 +37,19 @@ CLEAR = '\033[2J\033[H'
 
 # ASCII chars from darkest to lightest
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
-# Color gradient for each character
+# Rainbow gradient (red → yellow → green → cyan → blue → magenta)
 ASCII_COLORS = [
-    '\033[90m',  # dark gray
-    '\033[37m',  # light gray
-    '\033[97m',  # white
-    '\033[36m',  # cyan
-    '\033[35m',  # magenta
-    '\033[34m',  # blue
+    '\033[31m',  # red (darkest)
+    '\033[91m',  # bright red
     '\033[33m',  # yellow
     '\033[32m',  # green
-    '\033[31m',  # red
-    '\033[33m',  # yellow
-    '\033[37m',  # white
+    '\033[36m',  # cyan
+    '\033[34m',  # blue
+    '\033[35m',  # magenta
+    '\033[95m',  # bright magenta
+    '\033[96m',  # bright cyan
+    '\033[92m',  # bright green
+    '\033[37m',  # white (lightest)
 ]
 RESET = '\033[0m'
 
@@ -116,12 +116,21 @@ def display_results(videos):
         except ValueError:
             print(f"{RED}Please enter a number{RESET}")
 
-def resize_image(image, new_width=100):
-    """Resize image for ASCII display"""
+def resize_image(image, new_width=100, new_height=None):
+    """Resize image for ASCII display with aspect ratio"""
     from PIL import Image
     width, height = image.size
-    ratio = height / width / 1.65
-    new_height = int(new_width * ratio)
+
+    if new_height is None:
+        # Default aspect ratio for ASCII (chars are taller than wide)
+        ratio = height / width / 1.65
+        new_height = int(new_width * ratio)
+    else:
+        # Use specified height, adjust width if needed to maintain aspect
+        original_ratio = width / height
+        calculated_width = int(new_height * original_ratio / 1.65)
+        new_width = min(new_width, calculated_width)
+
     return image.resize((new_width, new_height))
 
 def grayscale(image):
@@ -156,14 +165,25 @@ def get_terminal_width():
     except:
         return 80
 
-def frame_to_ascii(frame_path, width=None):
-    """Convert a single frame to ASCII art with colors"""
+def get_terminal_height():
+    """Get terminal height"""
+    try:
+        import os
+        return os.get_terminal_size().lines - 3  # Leave space for controls
+    except:
+        return 24
+
+def frame_to_ascii(frame_path, width=None, height=None):
+    """Convert a single frame to ASCII art with colors, matching video aspect ratio"""
     try:
         from PIL import Image
         if width is None:
             width = get_terminal_width() - 2
+        if height is None:
+            height = get_terminal_height()
+
         image = Image.open(frame_path)
-        image = resize_image(image, width)
+        image = resize_image(image, width, height)
         image = grayscale(image)
         ascii_str = pixels_to_ascii(image)
 
