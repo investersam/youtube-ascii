@@ -148,10 +148,11 @@ def colorize_ascii(ascii_str):
     return colored
 
 def get_terminal_width():
-    """Get actual terminal width"""
+    """Get usable terminal width (minimum 50 for readable ASCII)"""
     try:
         import os
-        return os.get_terminal_size().columns
+        width = os.get_terminal_size().columns
+        return max(width, 50)  # Minimum 50 chars for readable ASCII art
     except:
         return 80
 
