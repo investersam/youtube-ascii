@@ -37,21 +37,18 @@ CLEAR = '\033[2J\033[H'
 
 # ASCII chars from darkest to lightest
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
-# Rainbow gradient (red → yellow → green → cyan → blue → magenta)
-ASCII_COLORS = [
-    '\033[31m',  # red (darkest)
-    '\033[91m',  # bright red
-    '\033[33m',  # yellow
-    '\033[32m',  # green
-    '\033[36m',  # cyan
-    '\033[34m',  # blue
-    '\033[35m',  # magenta
-    '\033[95m',  # bright magenta
-    '\033[96m',  # bright cyan
-    '\033[92m',  # bright green
-    '\033[37m',  # white (lightest)
-]
 RESET = '\033[0m'
+
+# ANSI 256 color map
+def rgb_to_ansi(r, g, b):
+    """Convert RGB to nearest ANSI 256 color"""
+    # Use 256-color ANSI palette
+    # Convert 0-255 RGB to 0-5 in each channel (6 levels per channel = 216 colors)
+    r = int((r / 255) * 5)
+    g = int((g / 255) * 5)
+    b = int((b / 255) * 5)
+    color_code = 16 + (36 * r) + (6 * g) + b
+    return f'\033[38;5;{color_code}m'
 
 def search_youtube(query):
     """Search YouTube and return results"""
@@ -137,24 +134,27 @@ def grayscale(image):
     """Convert to grayscale"""
     return image.convert("L")
 
-def pixels_to_ascii(image):
-    """Convert grayscale pixels to ASCII"""
-    pixels = image.getdata()
-    ascii_str = ""
-    for pixel in pixels:
-        ascii_str += ASCII_CHARS[pixel // 25]
-    return ascii_str
+def pixels_to_ascii_colored(image):
+    """Convert image pixels to ASCII with actual video colors"""
+    # Convert to RGB if needed
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
 
-def colorize_ascii(ascii_str):
-    """Add colors to ASCII string"""
-    colored = ""
-    for char in ascii_str:
-        if char in ASCII_CHARS:
-            idx = ASCII_CHARS.index(char)
-            colored += ASCII_COLORS[idx] + char + RESET
-        else:
-            colored += char
-    return colored
+    pixels = list(image.getdata())
+    # Also get grayscale for brightness
+    gray_image = image.convert('L')
+    gray_pixels = gray_image.getdata()
+
+    ascii_str = ""
+    for i, (rgb, gray) in enumerate(zip(pixels, gray_pixels)):
+        r, g, b = rgb
+        # Use brightness for character selection
+        char_idx = gray // 25
+        char = ASCII_CHARS[char_idx]
+        # Use actual color for coloring
+        color = rgb_to_ansi(r, g, b)
+        ascii_str += color + char + RESET
+    return ascii_str
 
 def get_terminal_width():
     """Get usable terminal width (minimum 50 for readable ASCII)"""
@@ -174,7 +174,7 @@ def get_terminal_height():
         return 24
 
 def frame_to_ascii(frame_path, width=None, height=None):
-    """Convert a single frame to ASCII art with colors, matching video aspect ratio"""
+    """Convert a single frame to ASCII art with real video colors"""
     try:
         from PIL import Image
         if width is None:
@@ -184,15 +184,38 @@ def frame_to_ascii(frame_path, width=None, height=None):
 
         image = Image.open(frame_path)
         image = resize_image(image, width, height)
-        image = grayscale(image)
-        ascii_str = pixels_to_ascii(image)
+        # Keep RGB colors, don't convert to grayscale
+        ascii_str = pixels_to_ascii_colored(image)
 
         img_width = image.width
         ascii_img = ""
-        # Break into lines BEFORE colorizing
-        for i in range(0, len(ascii_str), img_width):
-            line = ascii_str[i:i+img_width]
-            line = colorize_ascii(line)  # Colorize each line
+
+        # Split by characters while preserving color codes
+        char_count = 0
+        line = ""
+        i = 0
+        while i < len(ascii_str):
+            if ascii_str[i:i+1] == '\033':
+                # Skip color code
+                end = ascii_str.find('m', i) + 1
+                line += ascii_str[i:end]
+                i = end
+            elif ascii_str[i] == '\n':
+                ascii_img += line + "\n"
+                line = ""
+                char_count = 0
+                i += 1
+            else:
+                # Regular character
+                line += ascii_str[i]
+                char_count += 1
+                i += 1
+                if char_count >= img_width:
+                    ascii_img += line + "\n"
+                    line = ""
+                    char_count = 0
+
+        if line:
             ascii_img += line + "\n"
         return ascii_img
     except Exception as e:
