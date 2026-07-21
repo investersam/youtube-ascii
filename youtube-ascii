@@ -166,13 +166,14 @@ def frame_to_ascii(frame_path, width=None):
         image = resize_image(image, width)
         image = grayscale(image)
         ascii_str = pixels_to_ascii(image)
-        ascii_str = colorize_ascii(ascii_str)
 
         img_width = image.width
-        ascii_str_len = len(ascii_str)
         ascii_img = ""
-        for i in range(0, ascii_str_len, img_width):
-            ascii_img += ascii_str[i:i+img_width] + "\n"
+        # Break into lines BEFORE colorizing
+        for i in range(0, len(ascii_str), img_width):
+            line = ascii_str[i:i+img_width]
+            line = colorize_ascii(line)  # Colorize each line
+            ascii_img += line + "\n"
         return ascii_img
     except Exception as e:
         return f"Error: {e}"
