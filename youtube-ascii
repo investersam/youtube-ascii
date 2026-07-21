@@ -35,20 +35,23 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars from darkest to lightest with colors
-ASCII_CHARS = [
-    f'\033[90m@\033[0m',  # dark gray
-    f'\033[37m#\033[0m',  # light gray
-    f'\033[97mS\033[0m',  # white
-    f'\033[36m%\033[0m',  # cyan
-    f'\033[35m?\033[0m',  # magenta
-    f'\033[34m*\033[0m',  # blue
-    f'\033[33m+\033[0m',  # yellow
-    f'\033[32m;\033[0m',  # green
-    f'\033[31m:\033[0m',  # red
-    f'\033[33m,\033[0m',  # yellow
-    f'\033[37m.\033[0m',  # white
+# ASCII chars from darkest to lightest
+ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
+# Color gradient for each character
+ASCII_COLORS = [
+    '\033[90m',  # dark gray
+    '\033[37m',  # light gray
+    '\033[97m',  # white
+    '\033[36m',  # cyan
+    '\033[35m',  # magenta
+    '\033[34m',  # blue
+    '\033[33m',  # yellow
+    '\033[32m',  # green
+    '\033[31m',  # red
+    '\033[33m',  # yellow
+    '\033[37m',  # white
 ]
+RESET = '\033[0m'
 
 def search_youtube(query):
     """Search YouTube and return results"""
@@ -126,12 +129,23 @@ def grayscale(image):
     return image.convert("L")
 
 def pixels_to_ascii(image):
-    """Convert grayscale pixels to ASCII with colors"""
+    """Convert grayscale pixels to ASCII"""
     pixels = image.getdata()
     ascii_str = ""
     for pixel in pixels:
         ascii_str += ASCII_CHARS[pixel // 25]
     return ascii_str
+
+def colorize_ascii(ascii_str):
+    """Add colors to ASCII string"""
+    colored = ""
+    for char in ascii_str:
+        if char in ASCII_CHARS:
+            idx = ASCII_CHARS.index(char)
+            colored += ASCII_COLORS[idx] + char + RESET
+        else:
+            colored += char
+    return colored
 
 def get_terminal_width():
     """Get actual terminal width"""
@@ -142,7 +156,7 @@ def get_terminal_width():
         return 80
 
 def frame_to_ascii(frame_path, width=None):
-    """Convert a single frame to ASCII art"""
+    """Convert a single frame to ASCII art with colors"""
     try:
         from PIL import Image
         if width is None:
@@ -151,6 +165,7 @@ def frame_to_ascii(frame_path, width=None):
         image = resize_image(image, width)
         image = grayscale(image)
         ascii_str = pixels_to_ascii(image)
+        ascii_str = colorize_ascii(ascii_str)
 
         img_width = image.width
         ascii_str_len = len(ascii_str)
@@ -159,7 +174,7 @@ def frame_to_ascii(frame_path, width=None):
             ascii_img += ascii_str[i:i+img_width] + "\n"
         return ascii_img
     except Exception as e:
-        return f"{RED}Error: {e}{RESET}"
+        return f"Error: {e}"
 
 def play_audio_only(video):
     """Play audio only (for narrow terminals)"""
