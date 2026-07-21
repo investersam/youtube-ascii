@@ -35,8 +35,20 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars from darkest to lightest (black and white)
-ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
+# ASCII chars from darkest to lightest with colors
+ASCII_CHARS = [
+    f'\033[90m@\033[0m',  # dark gray
+    f'\033[37m#\033[0m',  # light gray
+    f'\033[97mS\033[0m',  # white
+    f'\033[36m%\033[0m',  # cyan
+    f'\033[35m?\033[0m',  # magenta
+    f'\033[34m*\033[0m',  # blue
+    f'\033[33m+\033[0m',  # yellow
+    f'\033[32m;\033[0m',  # green
+    f'\033[31m:\033[0m',  # red
+    f'\033[33m,\033[0m',  # yellow
+    f'\033[37m.\033[0m',  # white
+]
 
 def search_youtube(query):
     """Search YouTube and return results"""
@@ -114,7 +126,7 @@ def grayscale(image):
     return image.convert("L")
 
 def pixels_to_ascii(image):
-    """Convert grayscale pixels to ASCII (black and white)"""
+    """Convert grayscale pixels to ASCII with colors"""
     pixels = image.getdata()
     ascii_str = ""
     for pixel in pixels:
