@@ -135,10 +135,11 @@ def pixels_to_ascii(image):
     return ascii_str
 
 def get_terminal_width():
-    """Get terminal width, default to 80 if can't detect"""
+    """Get terminal width, minimum 40 for ASCII art"""
     try:
         import os
-        return os.get_terminal_size().columns
+        width = os.get_terminal_size().columns
+        return max(width, 40)  # Minimum 40 chars for readable ASCII
     except:
         return 80
 
@@ -161,6 +162,39 @@ def frame_to_ascii(frame_path, width=None):
         return ascii_img
     except Exception as e:
         return f"{RED}Error: {e}{RESET}"
+
+def play_audio_only(video):
+    """Play audio only (for narrow terminals)"""
+    url = video.get('url', '')
+    title = video.get('title', 'Video')
+
+    if not url:
+        print(f"{RED}No URL found{RESET}")
+        return
+
+    print(f"\n{GREEN}🎵 Playing audio: {title}{RESET}\n")
+    try:
+        process = subprocess.Popen(
+            ['yt-dlp', '-f', 'bestaudio', '-o', '-', url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        subprocess.run(['mpv', '--no-video', '-'], stdin=process.stdout, check=False)
+        process.stdout.close()
+    except FileNotFoundError:
+        print(f"{RED}yt-dlp or mpv not found{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+
+def play_audio_only_file(video_path):
+    """Play audio from cached video file"""
+    print(f"\n{GREEN}🎵 Playing audio...{RESET}\n")
+    try:
+        subprocess.run(['mpv', '--no-video', video_path], check=False)
+    except FileNotFoundError:
+        print(f"{RED}mpv not found{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
 
 def play_from_cache(video_path):
     """Play cached video"""
@@ -297,9 +331,17 @@ def show_main_menu():
     """Show main menu"""
     cached = list_cached_videos()
 
+    try:
+        term_width = os.get_terminal_size().columns
+    except:
+        term_width = 80
+
     print(f"\n{BOLD}{MAGENTA}╔════════════════════════════════════════╗{RESET}")
     print(f"{BOLD}{MAGENTA}║   {CYAN}YouTube ASCII Video Player{MAGENTA}   ║{RESET}")
     print(f"{BOLD}{MAGENTA}╚════════════════════════════════════════╝{RESET}\n")
+
+    if term_width < 30:
+        print(f"{YELLOW}⚠ Terminal too narrow ({term_width}ch) for ASCII art{RESET}\n")
 
     if cached:
         print(f"{GREEN}📹 Cached Videos:{RESET}\n")
@@ -308,13 +350,15 @@ def show_main_menu():
         print()
 
     print(f"{YELLOW}s{RESET} - Search new video")
+    if term_width < 30:
+        print(f"{YELLOW}a{RESET} - Audio only mode")
     print(f"{YELLOW}c{RESET} - Clear cache")
     if cached:
         print(f"{YELLOW}1-{len(cached)}{RESET} - Play cached video")
     print()
 
     choice = input(f"{YELLOW}Choose option: {RESET}").strip().lower()
-    return choice, cached
+    return choice, cached, term_width
 
 def main():
     if len(sys.argv) > 1:
@@ -327,7 +371,7 @@ def main():
             play_ascii_video(video)
     else:
         while True:
-            choice, cached = show_main_menu()
+            choice, cached, term_width = show_main_menu()
 
             if choice == 's':
                 query = input(f"\n{YELLOW}Search YouTube: {RESET}").strip()
@@ -336,7 +380,23 @@ def main():
                     if videos:
                         video = display_results(videos)
                         if video:
-                            play_ascii_video(video)
+                            if term_width < 30:
+                                print(f"\n{YELLOW}(a)udio or (v)ideo? {RESET}", end='')
+                                mode = input().strip().lower()
+                                if mode == 'a':
+                                    play_audio_only(video)
+                                else:
+                                    play_ascii_video(video)
+                            else:
+                                play_ascii_video(video)
+            elif choice == 'a':
+                query = input(f"\n{YELLOW}Search YouTube: {RESET}").strip()
+                if query:
+                    videos = search_youtube(query)
+                    if videos:
+                        video = display_results(videos)
+                        if video:
+                            play_audio_only(video)
             elif choice == 'c':
                 import shutil
                 cache_dir = get_cache_dir()
@@ -351,7 +411,15 @@ def main():
                     video_path = os.path.join(get_cache_dir(), video_key, 'video.mp4')
                     if os.path.exists(video_path):
                         print(f"\n{GREEN}▶ Playing: {title}{RESET}\n")
-                        play_from_cache(video_path)
+                        if term_width < 30:
+                            print(f"{YELLOW}(a)udio or (v)ideo? {RESET}", end='')
+                            mode = input().strip().lower()
+                            if mode == 'a':
+                                play_audio_only_file(video_path)
+                            else:
+                                play_from_cache(video_path)
+                        else:
+                            play_from_cache(video_path)
                 else:
                     print(f"{RED}Invalid choice{RESET}")
             elif choice.lower() == 'q':
