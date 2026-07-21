@@ -35,21 +35,8 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars from darkest to lightest
+# ASCII chars from darkest to lightest (black and white)
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
-ASCII_CHARS_COLORED = [
-    f'\033[91m@\033[0m',  # red
-    f'\033[92m#\033[0m',  # green
-    f'\033[93mS\033[0m',  # yellow
-    f'\033[94m%\033[0m',  # blue
-    f'\033[95m?\033[0m',  # magenta
-    f'\033[96m*\033[0m',  # cyan
-    f'\033[97m+\033[0m',  # white
-    f'\033[90m;\033[0m',  # gray
-    f'\033[90m:\033[0m',  # gray
-    f'\033[90m,\033[0m',  # gray
-    f'\033[90m.\033[0m',  # gray
-]
 
 def search_youtube(query):
     """Search YouTube and return results"""
@@ -127,19 +114,18 @@ def grayscale(image):
     return image.convert("L")
 
 def pixels_to_ascii(image):
-    """Convert grayscale pixels to ASCII"""
+    """Convert grayscale pixels to ASCII (black and white)"""
     pixels = image.getdata()
     ascii_str = ""
     for pixel in pixels:
-        ascii_str += ASCII_CHARS_COLORED[pixel // 25]
+        ascii_str += ASCII_CHARS[pixel // 25]
     return ascii_str
 
 def get_terminal_width():
-    """Get terminal width, minimum 40 for ASCII art"""
+    """Get actual terminal width"""
     try:
         import os
-        width = os.get_terminal_size().columns
-        return max(width, 40)  # Minimum 40 chars for readable ASCII
+        return os.get_terminal_size().columns
     except:
         return 80
 
@@ -218,20 +204,28 @@ def play_from_cache(video_path):
         print(f"{RED}No frames found{RESET}")
         return
 
-    print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
+    print(f"{GREEN}Playing {len(frames)} frames with audio...{RESET}\n")
     print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
-    time.sleep(2)
+
+    # Start audio playback in background
+    audio_process = subprocess.Popen(
+        ['mpv', '--no-video', video_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
     try:
         for i, frame in enumerate(frames):
             print(CLEAR, end='')
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
-            print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
+            print(f"[{i+1}/{len(frames)}]")
             print(ascii_art)
             time.sleep(0.2)
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
+    finally:
+        audio_process.terminate()
 
 def play_ascii_video(video):
     """Play video as ASCII art and cache it"""
@@ -291,20 +285,28 @@ def play_ascii_video(video):
         print(f"{RED}No frames extracted{RESET}")
         return
 
-    print(f"{GREEN}Playing {len(frames)} frames...{RESET}\n")
+    print(f"{GREEN}Playing {len(frames)} frames with audio...{RESET}\n")
     print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
-    time.sleep(2)
+
+    # Start audio playback in background
+    audio_process = subprocess.Popen(
+        ['mpv', '--no-video', video_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
     try:
         for i, frame in enumerate(frames):
             print(CLEAR, end='')
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
-            print(f"{MAGENTA}[{i+1}/{len(frames)}]{RESET}")
+            print(f"[{i+1}/{len(frames)}]")
             print(ascii_art)
             time.sleep(0.2)
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
+    finally:
+        audio_process.terminate()
 
 def get_cache_dir():
     """Get or create cache directory"""
