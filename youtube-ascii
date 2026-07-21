@@ -134,10 +134,20 @@ def pixels_to_ascii(image):
         ascii_str += ASCII_CHARS_COLORED[pixel // 25]
     return ascii_str
 
-def frame_to_ascii(frame_path, width=100):
+def get_terminal_width():
+    """Get terminal width, default to 80 if can't detect"""
+    try:
+        import os
+        return os.get_terminal_size().columns
+    except:
+        return 80
+
+def frame_to_ascii(frame_path, width=None):
     """Convert a single frame to ASCII art"""
     try:
         from PIL import Image
+        if width is None:
+            width = get_terminal_width() - 2
         image = Image.open(frame_path)
         image = resize_image(image, width)
         image = grayscale(image)
