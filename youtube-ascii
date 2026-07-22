@@ -194,7 +194,7 @@ def frame_to_ascii(frame_path, width=None, height=None):
     try:
         from PIL import Image
         if width is None:
-            width = get_terminal_width() - 2
+            width = get_terminal_width()
         if height is None:
             height = get_terminal_height()
 
