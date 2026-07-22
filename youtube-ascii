@@ -165,13 +165,8 @@ def pixels_to_ascii_colored(image):
     return ascii_str
 
 def get_terminal_width():
-    """Get usable terminal width (minimum 50 for readable ASCII)"""
-    try:
-        import os
-        width = os.get_terminal_size().columns
-        return max(width, 50)  # Minimum 50 chars for readable ASCII art
-    except:
-        return 80
+    """Get usable terminal width (fixed 80 for consistent display)"""
+    return 80  # Fixed width to prevent color codes from breaking layout
 
 def get_terminal_height():
     """Get terminal height"""
