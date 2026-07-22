@@ -625,9 +625,15 @@ def main():
             elif choice == 'h':
                 query = input(f"\n{YELLOW}Search Shorts: {RESET}").strip()
                 if query:
-                    videos = search_youtube(f"{query} shorts")
+                    # Try multiple search patterns for Shorts
+                    videos = search_youtube(f"{query}")
                     if videos:
-                        video = display_results(videos)
+                        # Filter to likely Shorts (typically short duration)
+                        shorts_videos = [v for v in videos if v.get('duration', 61) <= 60]
+                        if shorts_videos:
+                            video = display_results(shorts_videos)
+                        else:
+                            video = display_results(videos)
                         if video:
                             play_ascii_video(video)
             elif choice == 'a':
