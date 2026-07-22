@@ -34,10 +34,10 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars - standard
+# ASCII chars - standard (ordered by darkness)
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
-# ASCII chars with letters (for text)
-ASCII_CHARS_ALPHA = ['@', '#', 'M', 'N', 'W', 'B', 'D', 'A', 'K', 'X', 'P', 'O', 'E', 'Z', 'R', 'Q', 'S', 'T', 'U', 'F', 'V', 'C', 'J', 'L', 'I', 'Y', 'H', 'G', 'p', 'a', 'e', 'o', 'x', 'k', '*', '+', ';', ':', ',', '.', '-', '~', '"', '\'', '`', '^']
+# ASCII chars with letters (ordered by visual density/darkness)
+ASCII_CHARS_ALPHA = ['@', '#', 'M', 'W', 'B', 'D', '%', 'Q', 'O', 'K', 'X', 'P', 'N', 'H', 'R', 'A', 'U', 'E', 'F', 'L', 'V', 'C', 'Y', 'Z', 'S', 'T', 'G', 'J', 'I', 'p', 'q', 'd', 'b', 'a', 'o', 'e', 'x', '&', '%', '#', '*', '+', '=', '~', '-', ':', ';', ',', '.', ' ']
 
 # Global settings
 SETTINGS = {
