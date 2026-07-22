@@ -52,6 +52,7 @@ PLAYBACK = {
     'paused': False,
     'skip_frames': 0,
     'quit': False,
+    'is_shorts': False,  # Track if playing Shorts
 }
 
 def enhance_image(image):
@@ -229,7 +230,8 @@ def show_main_menu():
             print(f"{CYAN}{i}.{RESET} {title}")
         print()
 
-    print(f"{YELLOW}s{RESET} - Search new video")
+    print(f"{YELLOW}s{RESET} - Search videos")
+    print(f"{YELLOW}h{RESET} - Search shorts")
     if term_width < 30:
         print(f"{YELLOW}a{RESET} - Audio only mode")
     print(f"{YELLOW}o{RESET} - Options")
@@ -299,6 +301,11 @@ def pixels_to_ascii_with_colors(image):
         result.append((char, (r, g, b)))
     return result
 
+def is_shorts_format(image):
+    """Check if image is in vertical/Shorts format"""
+    width, height = image.size
+    return height > width * 1.2  # More than 20% taller
+
 def frame_to_ascii(frame_path, width=None, height=None):
     """Convert a single frame to ASCII art with optional colors"""
     try:
@@ -309,6 +316,7 @@ def frame_to_ascii(frame_path, width=None, height=None):
             height = get_terminal_height()
 
         image = Image.open(frame_path)
+        is_shorts = is_shorts_format(image)
         image = resize_image(image, width, height)
 
         # Apply enhancement for better text clarity
@@ -392,8 +400,17 @@ def play_from_cache(video_path):
         print(f"{RED}No frames found{RESET}")
         return
 
+    # Detect if Shorts format
+    from PIL import Image
+    first_frame = Image.open(os.path.join(frames_dir, frames[0]))
+    PLAYBACK['is_shorts'] = is_shorts_format(first_frame)
+    first_frame.close()
+
+    shorts_text = "🎬 SHORTS MODE" if PLAYBACK['is_shorts'] else ""
     audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
-    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}")
+    if PLAYBACK['is_shorts']:
+        print(f"{MAGENTA}{shorts_text}{RESET}")
     print(f"{YELLOW}Controls: SPACE=pause, H/L=skip, Q=quit{RESET}\n")
 
     PLAYBACK['paused'] = False
@@ -506,8 +523,17 @@ def play_ascii_video(video):
         print(f"{RED}No frames extracted{RESET}")
         return
 
+    # Detect if Shorts format
+    from PIL import Image
+    first_frame = Image.open(os.path.join(frames_dir, frames[0]))
+    PLAYBACK['is_shorts'] = is_shorts_format(first_frame)
+    first_frame.close()
+
+    shorts_text = "🎬 SHORTS MODE" if PLAYBACK['is_shorts'] else ""
     audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
-    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}")
+    if PLAYBACK['is_shorts']:
+        print(f"{MAGENTA}{shorts_text}{RESET}")
     print(f"{YELLOW}Controls: SPACE=pause, H/L=skip, Q=quit{RESET}\n")
 
     PLAYBACK['paused'] = False
@@ -596,6 +622,14 @@ def main():
                                     play_ascii_video(video)
                             else:
                                 play_ascii_video(video)
+            elif choice == 'h':
+                query = input(f"\n{YELLOW}Search Shorts: {RESET}").strip()
+                if query:
+                    videos = search_youtube(f"{query} shorts")
+                    if videos:
+                        video = display_results(videos)
+                        if video:
+                            play_ascii_video(video)
             elif choice == 'a':
                 query = input(f"\n{YELLOW}Search YouTube: {RESET}").strip()
                 if query:
