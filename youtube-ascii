@@ -39,6 +39,12 @@ CLEAR = '\033[2J\033[H'
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
 RESET = '\033[0m'
 
+# Global settings
+SETTINGS = {
+    'color': True,   # Colored or B&W
+    'audio': True,   # Audio on or muted
+}
+
 # ANSI 256 color map
 def rgb_to_ansi(r, g, b):
     """Convert RGB to nearest ANSI 256 color"""
@@ -142,6 +148,14 @@ def grayscale(image):
     """Convert to grayscale"""
     return image.convert("L")
 
+def pixels_to_ascii(image):
+    """Convert grayscale pixels to ASCII (plain chars)"""
+    pixels = image.getdata()
+    ascii_str = ""
+    for pixel in pixels:
+        ascii_str += ASCII_CHARS[pixel // 25]
+    return ascii_str
+
 def pixels_to_ascii_with_colors(image):
     """Convert image pixels to ASCII with color info"""
     # Convert to RGB if needed
@@ -176,7 +190,7 @@ def get_terminal_height():
         return 24
 
 def frame_to_ascii(frame_path, width=None, height=None):
-    """Convert a single frame to ASCII art with real video colors"""
+    """Convert a single frame to ASCII art with optional colors"""
     try:
         from PIL import Image
         if width is None:
@@ -187,21 +201,27 @@ def frame_to_ascii(frame_path, width=None, height=None):
         image = Image.open(frame_path)
         image = resize_image(image, width, height)
 
-        # Get characters with their RGB colors
-        char_color_pairs = pixels_to_ascii_with_colors(image)
-
         img_width = image.width
         ascii_img = ""
 
-        # Break into lines first (simple, no color codes)
-        for i in range(0, len(char_color_pairs), img_width):
-            line_chars = char_color_pairs[i:i+img_width]
-            # Apply colors to each character
-            line = ""
-            for char, (r, g, b) in line_chars:
-                color = rgb_to_ansi(r, g, b)
-                line += color + char + RESET
-            ascii_img += line + "\n"
+        if SETTINGS['color']:
+            # Colored mode
+            char_color_pairs = pixels_to_ascii_with_colors(image)
+            # Break into lines and apply colors
+            for i in range(0, len(char_color_pairs), img_width):
+                line_chars = char_color_pairs[i:i+img_width]
+                line = ""
+                for char, (r, g, b) in line_chars:
+                    color = rgb_to_ansi(r, g, b)
+                    line += color + char + RESET
+                ascii_img += line + "\n"
+        else:
+            # B&W mode (just brightness)
+            image = image.convert('L')
+            ascii_str = pixels_to_ascii(image)
+            # Break into lines
+            for i in range(0, len(ascii_str), img_width):
+                ascii_img += ascii_str[i:i+img_width] + "\n"
 
         return ascii_img
     except Exception as e:
@@ -262,15 +282,18 @@ def play_from_cache(video_path):
         print(f"{RED}No frames found{RESET}")
         return
 
-    print(f"{GREEN}Playing {len(frames)} frames with audio...{RESET}\n")
+    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
     print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
 
-    # Start audio playback in background
-    audio_process = subprocess.Popen(
-        ['mpv', '--no-video', video_path],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    # Start audio playback in background if enabled
+    audio_process = None
+    if SETTINGS['audio']:
+        audio_process = subprocess.Popen(
+            ['mpv', '--no-video', video_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
 
     try:
         for i, frame in enumerate(frames):
@@ -283,7 +306,8 @@ def play_from_cache(video_path):
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
-        audio_process.terminate()
+        if audio_process:
+            audio_process.terminate()
 
 def play_ascii_video(video):
     """Play video as ASCII art and cache it"""
@@ -343,15 +367,18 @@ def play_ascii_video(video):
         print(f"{RED}No frames extracted{RESET}")
         return
 
-    print(f"{GREEN}Playing {len(frames)} frames with audio...{RESET}\n")
+    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
     print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
 
-    # Start audio playback in background
-    audio_process = subprocess.Popen(
-        ['mpv', '--no-video', video_path],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+    # Start audio playback in background if enabled
+    audio_process = None
+    if SETTINGS['audio']:
+        audio_process = subprocess.Popen(
+            ['mpv', '--no-video', video_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
 
     try:
         for i, frame in enumerate(frames):
@@ -364,7 +391,8 @@ def play_ascii_video(video):
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
-        audio_process.terminate()
+        if audio_process:
+            audio_process.terminate()
 
 def get_cache_dir():
     """Get or create cache directory"""
@@ -386,6 +414,26 @@ def list_cached_videos():
                     title = f.read().strip()
                 cached[item] = title
     return cached
+
+def show_settings_menu():
+    """Show playback settings"""
+    print(f"\n{BOLD}{CYAN}━━━ Playback Settings ━━━{RESET}\n")
+    print(f"1. Display: {GREEN if SETTINGS['color'] else YELLOW}{'Colored' if SETTINGS['color'] else 'Black & White'}{RESET}")
+    print(f"2. Audio: {GREEN if SETTINGS['audio'] else YELLOW}{'On' if SETTINGS['audio'] else 'Muted'}{RESET}")
+    print(f"b - Back to menu")
+    print()
+
+    choice = input(f"{YELLOW}Choose option: {RESET}").strip().lower()
+
+    if choice == '1':
+        SETTINGS['color'] = not SETTINGS['color']
+        show_settings_menu()
+    elif choice == '2':
+        SETTINGS['audio'] = not SETTINGS['audio']
+        show_settings_menu()
+    elif choice != 'b':
+        print(f"{RED}Invalid choice{RESET}")
+        show_settings_menu()
 
 def show_main_menu():
     """Show main menu"""
@@ -412,6 +460,7 @@ def show_main_menu():
     print(f"{YELLOW}s{RESET} - Search new video")
     if term_width < 30:
         print(f"{YELLOW}a{RESET} - Audio only mode")
+    print(f"{YELLOW}o{RESET} - Options")
     print(f"{YELLOW}c{RESET} - Clear cache")
     if cached:
         print(f"{YELLOW}1-{len(cached)}{RESET} - Play cached video")
@@ -457,6 +506,8 @@ def main():
                         video = display_results(videos)
                         if video:
                             play_audio_only(video)
+            elif choice == 'o':
+                show_settings_menu()
             elif choice == 'c':
                 import shutil
                 cache_dir = get_cache_dir()
