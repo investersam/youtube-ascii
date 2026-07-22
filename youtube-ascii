@@ -284,13 +284,22 @@ def play_from_cache(video_path):
         )
 
     try:
+        frame_duration = 0.2  # 5 fps (200ms per frame)
+        start_time = time.time()
+
         for i, frame in enumerate(frames):
             print(CLEAR, end='')
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
             print(f"[{i+1}/{len(frames)}]")
             print(ascii_art)
-            time.sleep(0.2)
+
+            # Sync to actual frame timing to prevent audio drift
+            elapsed = time.time() - start_time
+            expected_time = (i + 1) * frame_duration
+            sleep_time = expected_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
@@ -369,13 +378,22 @@ def play_ascii_video(video):
         )
 
     try:
+        frame_duration = 0.2  # 5 fps (200ms per frame)
+        start_time = time.time()
+
         for i, frame in enumerate(frames):
             print(CLEAR, end='')
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
             print(f"[{i+1}/{len(frames)}]")
             print(ascii_art)
-            time.sleep(0.2)
+
+            # Sync to actual frame timing to prevent audio drift
+            elapsed = time.time() - start_time
+            expected_time = (i + 1) * frame_duration
+            sleep_time = expected_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
