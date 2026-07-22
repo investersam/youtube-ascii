@@ -630,10 +630,10 @@ def main():
                     try:
                         # Try to get shorts from channel
                         result = subprocess.run(
-                            ['yt-dlp', '-j', f'https://www.youtube.com/@{query}/shorts'],
+                            ['yt-dlp', '-j', '--max-downloads', '10', f'https://www.youtube.com/@{query}/shorts'],
                             capture_output=True,
                             text=True,
-                            timeout=10
+                            timeout=30
                         )
 
                         if result.returncode == 0:
