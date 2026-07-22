@@ -7,18 +7,15 @@ import tempfile
 import time
 from pathlib import Path
 import shutil
-import threading
 import select
 
 # Auto-install dependencies
 def check_and_install_deps():
     """Check and install missing dependencies"""
-    # Check for ffmpeg
     if not shutil.which('ffmpeg'):
         print("Installing ffmpeg...")
         subprocess.run(['sudo', 'apt-get', 'install', '-y', 'ffmpeg'], check=False)
 
-    # Check for Pillow
     try:
         from PIL import Image
     except ImportError:
@@ -37,57 +34,47 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars from darkest to lightest
+# ASCII chars
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
-RESET = '\033[0m'
 
 # Global settings
 SETTINGS = {
-    'color': True,   # Colored or B&W
-    'audio': True,   # Audio on or muted
+    'color': True,
+    'audio': True,
 }
 
 # Playback state
 PLAYBACK = {
     'paused': False,
-    'skip_frames': 0,  # Positive to skip forward, negative to skip backward
+    'skip_frames': 0,
     'quit': False,
 }
 
-# ANSI 256 color map
-def input_listener():
-    """Listen for keyboard input and update playback state"""
-    import sys
-    import tty
-    import termios
-
-    try:
-        while not PLAYBACK['quit']:
-            # Check if input is available
-            if select.select([sys.stdin], [], [], 0)[0]:
-                ch = sys.stdin.read(1).lower()
-                if ch == ' ':
-                    PLAYBACK['paused'] = not PLAYBACK['paused']
-                elif ch in ['l', '→'] or ch == '\x1b[C':  # Right arrow
-                    PLAYBACK['skip_frames'] = 5  # Skip 5 frames forward
-                elif ch in ['h', '←'] or ch == '\x1b[D':  # Left arrow
-                    PLAYBACK['skip_frames'] = -5  # Skip 5 frames backward
-                elif ch == 'q':
-                    PLAYBACK['quit'] = True
-                elif ch == 'p':
-                    PLAYBACK['paused'] = not PLAYBACK['paused']
-    except:
-        pass
-
 def rgb_to_ansi(r, g, b):
     """Convert RGB to nearest ANSI 256 color"""
-    # Use 256-color ANSI palette
-    # Convert 0-255 RGB to 0-5 in each channel (6 levels per channel = 216 colors)
     r = int((r / 255) * 5)
     g = int((g / 255) * 5)
     b = int((b / 255) * 5)
     color_code = 16 + (36 * r) + (6 * g) + b
     return f'\033[38;5;{color_code}m'
+
+def check_input():
+    """Check if there's keyboard input available"""
+    try:
+        if select.select([sys.stdin], [], [], 0)[0]:
+            ch = sys.stdin.read(1).lower()
+            if ch == ' ':
+                PLAYBACK['paused'] = not PLAYBACK['paused']
+            elif ch == 'l':
+                PLAYBACK['skip_frames'] = 5
+            elif ch == 'h':
+                PLAYBACK['skip_frames'] = -5
+            elif ch == 'q':
+                PLAYBACK['quit'] = True
+            elif ch == 'p':
+                PLAYBACK['paused'] = not PLAYBACK['paused']
+    except:
+        pass
 
 def search_youtube(query):
     """Search YouTube and return results"""
@@ -152,349 +139,6 @@ def display_results(videos):
         except ValueError:
             print(f"{RED}Please enter a number{RESET}")
 
-def resize_image(image, new_width=100, new_height=None):
-    """Resize image for ASCII display to match terminal"""
-    from PIL import Image
-    width, height = image.size
-    original_ratio = width / height
-
-    # Always use the requested width, calculate height based on aspect ratio
-    # Char aspect ratio (chars are taller than wide)
-    char_ratio = 1.65
-    new_height = int(new_width / original_ratio * char_ratio)
-
-    return image.resize((new_width, new_height))
-
-def grayscale(image):
-    """Convert to grayscale"""
-    return image.convert("L")
-
-def pixels_to_ascii(image):
-    """Convert grayscale pixels to ASCII (plain chars)"""
-    pixels = image.getdata()
-    ascii_str = ""
-    for pixel in pixels:
-        ascii_str += ASCII_CHARS[pixel // 25]
-    return ascii_str
-
-def pixels_to_ascii_with_colors(image):
-    """Convert image pixels to ASCII with color info"""
-    # Convert to RGB if needed
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-
-    pixels = list(image.getdata())
-    # Also get grayscale for brightness
-    gray_image = image.convert('L')
-    gray_pixels = gray_image.getdata()
-
-    # Store (char, color_rgb) tuples
-    result = []
-    for i, (rgb, gray) in enumerate(zip(pixels, gray_pixels)):
-        r, g, b = rgb
-        # Use brightness for character selection
-        char_idx = gray // 25
-        char = ASCII_CHARS[char_idx]
-        result.append((char, (r, g, b)))
-    return result
-
-def get_terminal_width():
-    """Get usable terminal width (fixed 80 for consistent display)"""
-    return 80  # Fixed width to prevent color codes from breaking layout
-
-def get_terminal_height():
-    """Get full terminal height"""
-    try:
-        import os
-        return os.get_terminal_size().lines - 1  # One line for newline at end
-    except:
-        return 24
-
-def frame_to_ascii(frame_path, width=None, height=None):
-    """Convert a single frame to ASCII art with optional colors"""
-    try:
-        from PIL import Image
-        if width is None:
-            width = get_terminal_width()
-        if height is None:
-            height = get_terminal_height()
-
-        image = Image.open(frame_path)
-        image = resize_image(image, width, height)
-
-        img_width = image.width
-        ascii_img = ""
-
-        if SETTINGS['color']:
-            # Colored mode
-            char_color_pairs = pixels_to_ascii_with_colors(image)
-            # Break into lines and apply colors
-            for i in range(0, len(char_color_pairs), img_width):
-                line_chars = char_color_pairs[i:i+img_width]
-                line = ""
-                for char, (r, g, b) in line_chars:
-                    color = rgb_to_ansi(r, g, b)
-                    line += color + char + RESET
-                ascii_img += line + "\n"
-        else:
-            # B&W mode (just brightness)
-            image = image.convert('L')
-            ascii_str = pixels_to_ascii(image)
-            # Break into lines
-            for i in range(0, len(ascii_str), img_width):
-                ascii_img += ascii_str[i:i+img_width] + "\n"
-
-        return ascii_img
-    except Exception as e:
-        return f"Error: {e}"
-
-def play_audio_only(video):
-    """Play audio only (for narrow terminals)"""
-    url = video.get('url', '')
-    title = video.get('title', 'Video')
-
-    if not url:
-        print(f"{RED}No URL found{RESET}")
-        return
-
-    print(f"\n{GREEN}🎵 Playing audio: {title}{RESET}\n")
-    try:
-        process = subprocess.Popen(
-            ['yt-dlp', '-f', 'bestaudio', '-o', '-', url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL
-        )
-        subprocess.run(['mpv', '--no-video', '-'], stdin=process.stdout, check=False)
-        process.stdout.close()
-    except FileNotFoundError:
-        print(f"{RED}yt-dlp or mpv not found{RESET}")
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}Playback stopped{RESET}")
-
-def play_audio_only_file(video_path):
-    """Play audio from cached video file"""
-    print(f"\n{GREEN}🎵 Playing audio...{RESET}\n")
-    try:
-        subprocess.run(['mpv', '--no-video', video_path], check=False)
-    except FileNotFoundError:
-        print(f"{RED}mpv not found{RESET}")
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}Playback stopped{RESET}")
-
-def play_from_cache(video_path):
-    """Play cached video"""
-    frames_dir = os.path.dirname(video_path) + '/frames'
-
-    if not os.path.exists(frames_dir):
-        print(f"{YELLOW}Converting to ASCII...{RESET}")
-        os.makedirs(frames_dir, exist_ok=True)
-        try:
-            subprocess.run(
-                ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
-                capture_output=True,
-                timeout=120
-            )
-        except Exception as e:
-            print(f"{RED}Error: {e}{RESET}")
-            return
-
-    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
-    if not frames:
-        print(f"{RED}No frames found{RESET}")
-        return
-
-    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
-    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
-    print(f"{YELLOW}Controls: SPACE=pause, ←/→=skip, q=quit{RESET}\n")
-
-    # Reset playback state
-    PLAYBACK['paused'] = False
-    PLAYBACK['skip_frames'] = 0
-    PLAYBACK['quit'] = False
-
-    # Start input listener thread
-    input_thread = threading.Thread(target=input_listener, daemon=True)
-    input_thread.start()
-
-    # Start audio playback in background if enabled
-    audio_process = None
-    if SETTINGS['audio']:
-        audio_process = subprocess.Popen(
-            ['mpv', '--no-video', video_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-    try:
-        frame_duration = 0.2  # 5 fps (200ms per frame)
-        start_time = time.time()
-        i = 0
-
-        while i < len(frames) and not PLAYBACK['quit']:
-            # Handle skip
-            if PLAYBACK['skip_frames'] != 0:
-                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
-                PLAYBACK['skip_frames'] = 0
-                start_time = time.time()  # Reset timing
-
-            # Handle pause
-            if PLAYBACK['paused']:
-                print(CLEAR, end='')
-                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
-                while PLAYBACK['paused'] and not PLAYBACK['quit']:
-                    time.sleep(0.1)
-                if PLAYBACK['quit']:
-                    break
-                start_time = time.time()  # Reset timing after pause
-                continue
-
-            print(CLEAR, end='')
-            frame = frames[i]
-            frame_path = os.path.join(frames_dir, frame)
-            ascii_art = frame_to_ascii(frame_path)
-            print(f"[{i+1}/{len(frames)}] SPACE=pause ←/→=skip q=quit")
-            print(ascii_art)
-
-            # Sync to actual frame timing
-            elapsed = time.time() - start_time
-            expected_time = (i + 1) * frame_duration
-            sleep_time = expected_time - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            i += 1
-
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}Playback stopped{RESET}")
-    finally:
-        PLAYBACK['quit'] = True
-        if audio_process:
-            audio_process.terminate()
-
-def play_ascii_video(video):
-    """Play video as ASCII art and cache it"""
-    url = video.get('url', '')
-    title = video.get('title', 'Video')
-
-    if not url:
-        print(f"{RED}No URL found{RESET}")
-        return
-
-    print(f"\n{GREEN}▶ Downloading: {title}{RESET}\n")
-
-    # Create cache entry
-    cache_dir = get_cache_dir()
-    video_key = url.split('=')[-1][:11]
-    cache_path = os.path.join(cache_dir, video_key)
-    os.makedirs(cache_path, exist_ok=True)
-
-    # Save metadata
-    meta_file = os.path.join(cache_path, 'metadata.txt')
-    with open(meta_file, 'w') as f:
-        f.write(title)
-
-    video_path = os.path.join(cache_path, 'video.mp4')
-    frames_dir = os.path.join(cache_path, 'frames')
-    os.makedirs(frames_dir, exist_ok=True)
-
-    # Download video
-    try:
-        result = subprocess.run(
-            ['yt-dlp', '-f', 'worst', '-o', video_path, url],
-            capture_output=True,
-            timeout=60
-        )
-        if result.returncode != 0:
-            print(f"{RED}Download failed{RESET}")
-            return
-    except Exception as e:
-        print(f"{RED}Download error: {e}{RESET}")
-        return
-
-    # Extract frames
-    print(f"{YELLOW}🎬 Extracting frames...{RESET}")
-    try:
-        subprocess.run(
-            ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
-            capture_output=True,
-            timeout=120
-        )
-    except FileNotFoundError:
-        print(f"{RED}ffmpeg not found. Install with: sudo apt-get install ffmpeg python3-pil{RESET}")
-        return
-
-    # Play frames
-    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
-    if not frames:
-        print(f"{RED}No frames extracted{RESET}")
-        return
-
-    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
-    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
-    print(f"{YELLOW}Controls: SPACE=pause, ←/→=skip, q=quit{RESET}\n")
-
-    # Reset playback state
-    PLAYBACK['paused'] = False
-    PLAYBACK['skip_frames'] = 0
-    PLAYBACK['quit'] = False
-
-    # Start input listener thread
-    input_thread = threading.Thread(target=input_listener, daemon=True)
-    input_thread.start()
-
-    # Start audio playback in background if enabled
-    audio_process = None
-    if SETTINGS['audio']:
-        audio_process = subprocess.Popen(
-            ['mpv', '--no-video', video_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-    try:
-        frame_duration = 0.2  # 5 fps (200ms per frame)
-        start_time = time.time()
-        i = 0
-
-        while i < len(frames) and not PLAYBACK['quit']:
-            # Handle skip
-            if PLAYBACK['skip_frames'] != 0:
-                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
-                PLAYBACK['skip_frames'] = 0
-                start_time = time.time()  # Reset timing
-
-            # Handle pause
-            if PLAYBACK['paused']:
-                print(CLEAR, end='')
-                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
-                while PLAYBACK['paused'] and not PLAYBACK['quit']:
-                    time.sleep(0.1)
-                if PLAYBACK['quit']:
-                    break
-                start_time = time.time()  # Reset timing after pause
-                continue
-
-            print(CLEAR, end='')
-            frame = frames[i]
-            frame_path = os.path.join(frames_dir, frame)
-            ascii_art = frame_to_ascii(frame_path)
-            print(f"[{i+1}/{len(frames)}] SPACE=pause ←/→=skip q=quit")
-            print(ascii_art)
-
-            # Sync to actual frame timing
-            elapsed = time.time() - start_time
-            expected_time = (i + 1) * frame_duration
-            sleep_time = expected_time - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-            i += 1
-
-    except KeyboardInterrupt:
-        print(f"\n{YELLOW}Playback stopped{RESET}")
-    finally:
-        PLAYBACK['quit'] = True
-        if audio_process:
-            audio_process.terminate()
-
 def get_cache_dir():
     """Get or create cache directory"""
     cache_dir = os.path.expanduser('~/.youtube-ascii-cache')
@@ -508,7 +152,6 @@ def list_cached_videos():
     for item in os.listdir(cache_dir):
         item_path = os.path.join(cache_dir, item)
         if os.path.isdir(item_path):
-            # Read metadata if it exists
             meta_file = os.path.join(item_path, 'metadata.txt')
             if os.path.exists(meta_file):
                 with open(meta_file, 'r') as f:
@@ -569,6 +212,322 @@ def show_main_menu():
 
     choice = input(f"{YELLOW}Choose option: {RESET}").strip().lower()
     return choice, cached, term_width
+
+def get_terminal_width():
+    """Get fixed terminal width"""
+    return 80
+
+def get_terminal_height():
+    """Get full terminal height"""
+    try:
+        import os
+        return os.get_terminal_size().lines - 1
+    except:
+        return 24
+
+def resize_image(image, new_width=100, new_height=None):
+    """Resize image for ASCII display to match terminal"""
+    from PIL import Image
+    width, height = image.size
+    original_ratio = width / height
+
+    char_ratio = 1.65
+    new_height = int(new_width / original_ratio * char_ratio)
+
+    return image.resize((new_width, new_height))
+
+def grayscale(image):
+    """Convert to grayscale"""
+    return image.convert("L")
+
+def pixels_to_ascii(image):
+    """Convert grayscale pixels to ASCII (plain chars)"""
+    pixels = image.getdata()
+    ascii_str = ""
+    for pixel in pixels:
+        ascii_str += ASCII_CHARS[pixel // 25]
+    return ascii_str
+
+def pixels_to_ascii_with_colors(image):
+    """Convert image pixels to ASCII with color info"""
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+
+    pixels = list(image.getdata())
+    gray_image = image.convert('L')
+    gray_pixels = gray_image.getdata()
+
+    result = []
+    for i, (rgb, gray) in enumerate(zip(pixels, gray_pixels)):
+        r, g, b = rgb
+        char_idx = gray // 25
+        char = ASCII_CHARS[char_idx]
+        result.append((char, (r, g, b)))
+    return result
+
+def frame_to_ascii(frame_path, width=None, height=None):
+    """Convert a single frame to ASCII art with optional colors"""
+    try:
+        from PIL import Image
+        if width is None:
+            width = get_terminal_width()
+        if height is None:
+            height = get_terminal_height()
+
+        image = Image.open(frame_path)
+        image = resize_image(image, width, height)
+
+        img_width = image.width
+        ascii_img = ""
+
+        if SETTINGS['color']:
+            char_color_pairs = pixels_to_ascii_with_colors(image)
+            for i in range(0, len(char_color_pairs), img_width):
+                line_chars = char_color_pairs[i:i+img_width]
+                line = ""
+                for char, (r, g, b) in line_chars:
+                    color = rgb_to_ansi(r, g, b)
+                    line += color + char + RESET
+                ascii_img += line + "\n"
+        else:
+            image = image.convert('L')
+            ascii_str = pixels_to_ascii(image)
+            for i in range(0, len(ascii_str), img_width):
+                ascii_img += ascii_str[i:i+img_width] + "\n"
+
+        return ascii_img
+    except Exception as e:
+        return f"Error: {e}"
+
+def play_audio_only(video):
+    """Play audio only (for narrow terminals)"""
+    url = video.get('url', '')
+    title = video.get('title', 'Video')
+
+    if not url:
+        print(f"{RED}No URL found{RESET}")
+        return
+
+    print(f"\n{GREEN}🎵 Playing audio: {title}{RESET}\n")
+    try:
+        process = subprocess.Popen(
+            ['yt-dlp', '-f', 'bestaudio', '-o', '-', url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL
+        )
+        subprocess.run(['mpv', '--no-video', '-'], stdin=process.stdout, check=False)
+        process.stdout.close()
+    except FileNotFoundError:
+        print(f"{RED}yt-dlp or mpv not found{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+
+def play_audio_only_file(video_path):
+    """Play audio from cached video file"""
+    print(f"\n{GREEN}🎵 Playing audio...{RESET}\n")
+    try:
+        subprocess.run(['mpv', '--no-video', video_path], check=False)
+    except FileNotFoundError:
+        print(f"{RED}mpv not found{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+
+def play_from_cache(video_path):
+    """Play cached video with audio"""
+    frames_dir = os.path.dirname(video_path) + '/frames'
+
+    if not os.path.exists(frames_dir):
+        print(f"{YELLOW}Converting to ASCII...{RESET}")
+        os.makedirs(frames_dir, exist_ok=True)
+        try:
+            subprocess.run(
+                ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
+                capture_output=True,
+                timeout=120
+            )
+        except Exception as e:
+            print(f"{RED}Error: {e}{RESET}")
+            return
+
+    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+    if not frames:
+        print(f"{RED}No frames found{RESET}")
+        return
+
+    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
+    print(f"{YELLOW}Controls: SPACE=pause, H/L=skip, Q=quit{RESET}\n")
+
+    PLAYBACK['paused'] = False
+    PLAYBACK['skip_frames'] = 0
+    PLAYBACK['quit'] = False
+
+    audio_process = None
+    if SETTINGS['audio']:
+        audio_process = subprocess.Popen(
+            ['mpv', '--no-video', video_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+    try:
+        frame_duration = 0.2
+        start_time = time.time()
+        i = 0
+
+        while i < len(frames) and not PLAYBACK['quit']:
+            check_input()
+
+            if PLAYBACK['skip_frames'] != 0:
+                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
+                PLAYBACK['skip_frames'] = 0
+                start_time = time.time()
+
+            if PLAYBACK['paused']:
+                print(CLEAR, end='')
+                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
+                while PLAYBACK['paused'] and not PLAYBACK['quit']:
+                    check_input()
+                    time.sleep(0.1)
+                if PLAYBACK['quit']:
+                    break
+                start_time = time.time()
+                continue
+
+            print(CLEAR, end='')
+            frame = frames[i]
+            frame_path = os.path.join(frames_dir, frame)
+            ascii_art = frame_to_ascii(frame_path)
+            print(f"[{i+1}/{len(frames)}] SPACE=pause H/L=skip Q=quit")
+            print(ascii_art)
+
+            elapsed = time.time() - start_time
+            expected_time = (i + 1) * frame_duration
+            sleep_time = expected_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            i += 1
+
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+    finally:
+        PLAYBACK['quit'] = True
+        if audio_process:
+            audio_process.terminate()
+
+def play_ascii_video(video):
+    """Play video as ASCII art and cache it"""
+    url = video.get('url', '')
+    title = video.get('title', 'Video')
+
+    if not url:
+        print(f"{RED}No URL found{RESET}")
+        return
+
+    print(f"\n{GREEN}▶ Downloading: {title}{RESET}\n")
+
+    cache_dir = get_cache_dir()
+    video_key = url.split('=')[-1][:11]
+    cache_path = os.path.join(cache_dir, video_key)
+    os.makedirs(cache_path, exist_ok=True)
+
+    meta_file = os.path.join(cache_path, 'metadata.txt')
+    with open(meta_file, 'w') as f:
+        f.write(title)
+
+    video_path = os.path.join(cache_path, 'video.mp4')
+    frames_dir = os.path.join(cache_path, 'frames')
+    os.makedirs(frames_dir, exist_ok=True)
+
+    try:
+        result = subprocess.run(
+            ['yt-dlp', '-f', 'worst', '-o', video_path, url],
+            capture_output=True,
+            timeout=60
+        )
+        if result.returncode != 0:
+            print(f"{RED}Download failed{RESET}")
+            return
+    except Exception as e:
+        print(f"{RED}Download error: {e}{RESET}")
+        return
+
+    print(f"{YELLOW}🎬 Extracting frames...{RESET}")
+    try:
+        subprocess.run(
+            ['ffmpeg', '-i', video_path, '-vf', 'fps=5', f'{frames_dir}/frame_%04d.png'],
+            capture_output=True,
+            timeout=120
+        )
+    except FileNotFoundError:
+        print(f"{RED}ffmpeg not found. Install with: sudo apt-get install ffmpeg python3-pil{RESET}")
+        return
+
+    frames = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+    if not frames:
+        print(f"{RED}No frames extracted{RESET}")
+        return
+
+    audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
+    print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
+    print(f"{YELLOW}Controls: SPACE=pause, H/L=skip, Q=quit{RESET}\n")
+
+    PLAYBACK['paused'] = False
+    PLAYBACK['skip_frames'] = 0
+    PLAYBACK['quit'] = False
+
+    audio_process = None
+    if SETTINGS['audio']:
+        audio_process = subprocess.Popen(
+            ['mpv', '--no-video', video_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+    try:
+        frame_duration = 0.2
+        start_time = time.time()
+        i = 0
+
+        while i < len(frames) and not PLAYBACK['quit']:
+            check_input()
+
+            if PLAYBACK['skip_frames'] != 0:
+                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
+                PLAYBACK['skip_frames'] = 0
+                start_time = time.time()
+
+            if PLAYBACK['paused']:
+                print(CLEAR, end='')
+                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
+                while PLAYBACK['paused'] and not PLAYBACK['quit']:
+                    check_input()
+                    time.sleep(0.1)
+                if PLAYBACK['quit']:
+                    break
+                start_time = time.time()
+                continue
+
+            print(CLEAR, end='')
+            frame = frames[i]
+            frame_path = os.path.join(frames_dir, frame)
+            ascii_art = frame_to_ascii(frame_path)
+            print(f"[{i+1}/{len(frames)}] SPACE=pause H/L=skip Q=quit")
+            print(ascii_art)
+
+            elapsed = time.time() - start_time
+            expected_time = (i + 1) * frame_duration
+            sleep_time = expected_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            i += 1
+
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Playback stopped{RESET}")
+    finally:
+        PLAYBACK['quit'] = True
+        if audio_process:
+            audio_process.terminate()
 
 def main():
     if len(sys.argv) > 1:
