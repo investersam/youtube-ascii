@@ -41,6 +41,7 @@ ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
 SETTINGS = {
     'color': True,
     'audio': True,
+    'enhance': True,  # Enhance contrast for better text clarity
 }
 
 # Playback state
@@ -49,6 +50,22 @@ PLAYBACK = {
     'skip_frames': 0,
     'quit': False,
 }
+
+def enhance_image(image):
+    """Enhance contrast and levels for better text clarity"""
+    from PIL import ImageEnhance
+
+    # Increase contrast
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(1.5)
+
+    # Normalize/equalize
+    if image.mode == 'L':
+        # For grayscale
+        enhancer = ImageEnhance.Brightness(image)
+        image = enhancer.enhance(1.1)
+
+    return image
 
 def rgb_to_ansi(r, g, b):
     """Convert RGB to nearest ANSI 256 color"""
@@ -164,6 +181,7 @@ def show_settings_menu():
     print(f"\n{BOLD}{CYAN}━━━ Playback Settings ━━━{RESET}\n")
     print(f"1. Display: {GREEN if SETTINGS['color'] else YELLOW}{'Colored' if SETTINGS['color'] else 'Black & White'}{RESET}")
     print(f"2. Audio: {GREEN if SETTINGS['audio'] else YELLOW}{'On' if SETTINGS['audio'] else 'Muted'}{RESET}")
+    print(f"3. Enhance: {GREEN if SETTINGS['enhance'] else YELLOW}{'On' if SETTINGS['enhance'] else 'Off'}{RESET} (better for text)")
     print(f"b - Back to menu")
     print()
 
@@ -174,6 +192,9 @@ def show_settings_menu():
         show_settings_menu()
     elif choice == '2':
         SETTINGS['audio'] = not SETTINGS['audio']
+        show_settings_menu()
+    elif choice == '3':
+        SETTINGS['enhance'] = not SETTINGS['enhance']
         show_settings_menu()
     elif choice != 'b':
         print(f"{RED}Invalid choice{RESET}")
@@ -276,6 +297,10 @@ def frame_to_ascii(frame_path, width=None, height=None):
 
         image = Image.open(frame_path)
         image = resize_image(image, width, height)
+
+        # Apply enhancement for better text clarity
+        if SETTINGS['enhance']:
+            image = enhance_image(image)
 
         img_width = image.width
         ascii_img = ""
