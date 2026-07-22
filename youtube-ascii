@@ -142,8 +142,8 @@ def grayscale(image):
     """Convert to grayscale"""
     return image.convert("L")
 
-def pixels_to_ascii_colored(image):
-    """Convert image pixels to ASCII with actual video colors"""
+def pixels_to_ascii_with_colors(image):
+    """Convert image pixels to ASCII with color info"""
     # Convert to RGB if needed
     if image.mode != 'RGB':
         image = image.convert('RGB')
@@ -153,16 +153,15 @@ def pixels_to_ascii_colored(image):
     gray_image = image.convert('L')
     gray_pixels = gray_image.getdata()
 
-    ascii_str = ""
+    # Store (char, color_rgb) tuples
+    result = []
     for i, (rgb, gray) in enumerate(zip(pixels, gray_pixels)):
         r, g, b = rgb
         # Use brightness for character selection
         char_idx = gray // 25
         char = ASCII_CHARS[char_idx]
-        # Use actual color for coloring
-        color = rgb_to_ansi(r, g, b)
-        ascii_str += color + char + RESET
-    return ascii_str
+        result.append((char, (r, g, b)))
+    return result
 
 def get_terminal_width():
     """Get usable terminal width (fixed 80 for consistent display)"""
@@ -187,39 +186,23 @@ def frame_to_ascii(frame_path, width=None, height=None):
 
         image = Image.open(frame_path)
         image = resize_image(image, width, height)
-        # Keep RGB colors, don't convert to grayscale
-        ascii_str = pixels_to_ascii_colored(image)
+
+        # Get characters with their RGB colors
+        char_color_pairs = pixels_to_ascii_with_colors(image)
 
         img_width = image.width
         ascii_img = ""
 
-        # Split by characters while preserving color codes
-        char_count = 0
-        line = ""
-        i = 0
-        while i < len(ascii_str):
-            if ascii_str[i:i+1] == '\033':
-                # Skip color code
-                end = ascii_str.find('m', i) + 1
-                line += ascii_str[i:end]
-                i = end
-            elif ascii_str[i] == '\n':
-                ascii_img += line + "\n"
-                line = ""
-                char_count = 0
-                i += 1
-            else:
-                # Regular character
-                line += ascii_str[i]
-                char_count += 1
-                i += 1
-                if char_count >= img_width:
-                    ascii_img += line + "\n"
-                    line = ""
-                    char_count = 0
-
-        if line:
+        # Break into lines first (simple, no color codes)
+        for i in range(0, len(char_color_pairs), img_width):
+            line_chars = char_color_pairs[i:i+img_width]
+            # Apply colors to each character
+            line = ""
+            for char, (r, g, b) in line_chars:
+                color = rgb_to_ansi(r, g, b)
+                line += color + char + RESET
             ascii_img += line + "\n"
+
         return ascii_img
     except Exception as e:
         return f"Error: {e}"
