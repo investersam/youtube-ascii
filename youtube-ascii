@@ -34,14 +34,17 @@ MAGENTA = '\033[95m'
 RESET = '\033[0m'
 CLEAR = '\033[2J\033[H'
 
-# ASCII chars
+# ASCII chars - standard
 ASCII_CHARS = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.']
+# ASCII chars with letters (for text)
+ASCII_CHARS_ALPHA = ['@', '#', 'M', 'N', 'W', 'B', 'D', 'A', 'K', 'X', 'P', 'O', 'E', 'Z', 'R', 'Q', 'S', 'T', 'U', 'F', 'V', 'C', 'J', 'L', 'I', 'Y', 'H', 'G', 'p', 'a', 'e', 'o', 'x', 'k', '*', '+', ';', ':', ',', '.', '-', '~', '"', '\'', '`', '^']
 
 # Global settings
 SETTINGS = {
     'color': True,
     'audio': True,
     'enhance': True,  # Enhance contrast for better text clarity
+    'text_mode': False,  # Use alphanumeric chars for text rendering
 }
 
 # Playback state
@@ -181,7 +184,8 @@ def show_settings_menu():
     print(f"\n{BOLD}{CYAN}━━━ Playback Settings ━━━{RESET}\n")
     print(f"1. Display: {GREEN if SETTINGS['color'] else YELLOW}{'Colored' if SETTINGS['color'] else 'Black & White'}{RESET}")
     print(f"2. Audio: {GREEN if SETTINGS['audio'] else YELLOW}{'On' if SETTINGS['audio'] else 'Muted'}{RESET}")
-    print(f"3. Enhance: {GREEN if SETTINGS['enhance'] else YELLOW}{'On' if SETTINGS['enhance'] else 'Off'}{RESET} (better for text)")
+    print(f"3. Enhance: {GREEN if SETTINGS['enhance'] else YELLOW}{'On' if SETTINGS['enhance'] else 'Off'}{RESET}")
+    print(f"4. Text Mode: {GREEN if SETTINGS['text_mode'] else YELLOW}{'On' if SETTINGS['text_mode'] else 'Off'}{RESET} (shows A,B,C...)")
     print(f"b - Back to menu")
     print()
 
@@ -195,6 +199,9 @@ def show_settings_menu():
         show_settings_menu()
     elif choice == '3':
         SETTINGS['enhance'] = not SETTINGS['enhance']
+        show_settings_menu()
+    elif choice == '4':
+        SETTINGS['text_mode'] = not SETTINGS['text_mode']
         show_settings_menu()
     elif choice != 'b':
         print(f"{RED}Invalid choice{RESET}")
@@ -265,8 +272,11 @@ def pixels_to_ascii(image):
     """Convert grayscale pixels to ASCII (plain chars)"""
     pixels = image.getdata()
     ascii_str = ""
+    charset = ASCII_CHARS_ALPHA if SETTINGS['text_mode'] else ASCII_CHARS
+    char_levels = len(charset)
     for pixel in pixels:
-        ascii_str += ASCII_CHARS[pixel // 25]
+        idx = int((pixel / 255) * (char_levels - 1))
+        ascii_str += charset[idx]
     return ascii_str
 
 def pixels_to_ascii_with_colors(image):
@@ -278,11 +288,14 @@ def pixels_to_ascii_with_colors(image):
     gray_image = image.convert('L')
     gray_pixels = gray_image.getdata()
 
+    charset = ASCII_CHARS_ALPHA if SETTINGS['text_mode'] else ASCII_CHARS
+    char_levels = len(charset)
+
     result = []
     for i, (rgb, gray) in enumerate(zip(pixels, gray_pixels)):
         r, g, b = rgb
-        char_idx = gray // 25
-        char = ASCII_CHARS[char_idx]
+        char_idx = int((gray / 255) * (char_levels - 1))
+        char = charset[char_idx]
         result.append((char, (r, g, b)))
     return result
 
