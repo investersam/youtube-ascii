@@ -120,27 +120,15 @@ def display_results(videos):
             print(f"{RED}Please enter a number{RESET}")
 
 def resize_image(image, new_width=100, new_height=None):
-    """Resize image for ASCII display, fitting terminal size"""
+    """Resize image for ASCII display to match terminal"""
     from PIL import Image
     width, height = image.size
     original_ratio = width / height
 
-    if new_height is None:
-        # Default aspect ratio for ASCII (chars are taller than wide)
-        ratio = height / width / 1.65
-        new_height = int(new_width * ratio)
-    else:
-        # Fit to terminal: use both width and height constraints
-        # Char aspect ratio adjustment
-        char_ratio = 1.65
-        width_based_height = int(new_width / original_ratio * char_ratio)
-        height_based_width = int(new_height * original_ratio / char_ratio)
-
-        # Use the constraint that fits better
-        if width_based_height <= new_height:
-            new_height = width_based_height
-        else:
-            new_width = height_based_width
+    # Always use the requested width, calculate height based on aspect ratio
+    # Char aspect ratio (chars are taller than wide)
+    char_ratio = 1.65
+    new_height = int(new_width / original_ratio * char_ratio)
 
     return image.resize((new_width, new_height))
 
