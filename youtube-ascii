@@ -170,10 +170,10 @@ def get_terminal_width():
     return 80  # Fixed width to prevent color codes from breaking layout
 
 def get_terminal_height():
-    """Get terminal height"""
+    """Get full terminal height"""
     try:
         import os
-        return os.get_terminal_size().lines - 3  # Leave space for controls
+        return os.get_terminal_size().lines - 1  # One line for newline at end
     except:
         return 24
 
