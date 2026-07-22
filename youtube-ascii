@@ -7,6 +7,8 @@ import tempfile
 import time
 from pathlib import Path
 import shutil
+import threading
+import select
 
 # Auto-install dependencies
 def check_and_install_deps():
@@ -45,7 +47,38 @@ SETTINGS = {
     'audio': True,   # Audio on or muted
 }
 
+# Playback state
+PLAYBACK = {
+    'paused': False,
+    'skip_frames': 0,  # Positive to skip forward, negative to skip backward
+    'quit': False,
+}
+
 # ANSI 256 color map
+def input_listener():
+    """Listen for keyboard input and update playback state"""
+    import sys
+    import tty
+    import termios
+
+    try:
+        while not PLAYBACK['quit']:
+            # Check if input is available
+            if select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1).lower()
+                if ch == ' ':
+                    PLAYBACK['paused'] = not PLAYBACK['paused']
+                elif ch in ['l', '→'] or ch == '\x1b[C':  # Right arrow
+                    PLAYBACK['skip_frames'] = 5  # Skip 5 frames forward
+                elif ch in ['h', '←'] or ch == '\x1b[D':  # Left arrow
+                    PLAYBACK['skip_frames'] = -5  # Skip 5 frames backward
+                elif ch == 'q':
+                    PLAYBACK['quit'] = True
+                elif ch == 'p':
+                    PLAYBACK['paused'] = not PLAYBACK['paused']
+    except:
+        pass
+
 def rgb_to_ansi(r, g, b):
     """Convert RGB to nearest ANSI 256 color"""
     # Use 256-color ANSI palette
@@ -272,7 +305,16 @@ def play_from_cache(video_path):
 
     audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
     print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
-    print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+    print(f"{YELLOW}Controls: SPACE=pause, ←/→=skip, q=quit{RESET}\n")
+
+    # Reset playback state
+    PLAYBACK['paused'] = False
+    PLAYBACK['skip_frames'] = 0
+    PLAYBACK['quit'] = False
+
+    # Start input listener thread
+    input_thread = threading.Thread(target=input_listener, daemon=True)
+    input_thread.start()
 
     # Start audio playback in background if enabled
     audio_process = None
@@ -286,23 +328,45 @@ def play_from_cache(video_path):
     try:
         frame_duration = 0.2  # 5 fps (200ms per frame)
         start_time = time.time()
+        i = 0
 
-        for i, frame in enumerate(frames):
+        while i < len(frames) and not PLAYBACK['quit']:
+            # Handle skip
+            if PLAYBACK['skip_frames'] != 0:
+                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
+                PLAYBACK['skip_frames'] = 0
+                start_time = time.time()  # Reset timing
+
+            # Handle pause
+            if PLAYBACK['paused']:
+                print(CLEAR, end='')
+                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
+                while PLAYBACK['paused'] and not PLAYBACK['quit']:
+                    time.sleep(0.1)
+                if PLAYBACK['quit']:
+                    break
+                start_time = time.time()  # Reset timing after pause
+                continue
+
             print(CLEAR, end='')
+            frame = frames[i]
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
-            print(f"[{i+1}/{len(frames)}]")
+            print(f"[{i+1}/{len(frames)}] SPACE=pause ←/→=skip q=quit")
             print(ascii_art)
 
-            # Sync to actual frame timing to prevent audio drift
+            # Sync to actual frame timing
             elapsed = time.time() - start_time
             expected_time = (i + 1) * frame_duration
             sleep_time = expected_time - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            i += 1
+
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
+        PLAYBACK['quit'] = True
         if audio_process:
             audio_process.terminate()
 
@@ -366,7 +430,16 @@ def play_ascii_video(video):
 
     audio_text = "with audio" if SETTINGS['audio'] else "(muted)"
     print(f"{GREEN}Playing {len(frames)} frames {audio_text}...{RESET}\n")
-    print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+    print(f"{YELLOW}Controls: SPACE=pause, ←/→=skip, q=quit{RESET}\n")
+
+    # Reset playback state
+    PLAYBACK['paused'] = False
+    PLAYBACK['skip_frames'] = 0
+    PLAYBACK['quit'] = False
+
+    # Start input listener thread
+    input_thread = threading.Thread(target=input_listener, daemon=True)
+    input_thread.start()
 
     # Start audio playback in background if enabled
     audio_process = None
@@ -380,23 +453,45 @@ def play_ascii_video(video):
     try:
         frame_duration = 0.2  # 5 fps (200ms per frame)
         start_time = time.time()
+        i = 0
 
-        for i, frame in enumerate(frames):
+        while i < len(frames) and not PLAYBACK['quit']:
+            # Handle skip
+            if PLAYBACK['skip_frames'] != 0:
+                i = max(0, min(len(frames) - 1, i + PLAYBACK['skip_frames']))
+                PLAYBACK['skip_frames'] = 0
+                start_time = time.time()  # Reset timing
+
+            # Handle pause
+            if PLAYBACK['paused']:
+                print(CLEAR, end='')
+                print(f"{YELLOW}⏸ PAUSED [space to resume]{RESET}\n")
+                while PLAYBACK['paused'] and not PLAYBACK['quit']:
+                    time.sleep(0.1)
+                if PLAYBACK['quit']:
+                    break
+                start_time = time.time()  # Reset timing after pause
+                continue
+
             print(CLEAR, end='')
+            frame = frames[i]
             frame_path = os.path.join(frames_dir, frame)
             ascii_art = frame_to_ascii(frame_path)
-            print(f"[{i+1}/{len(frames)}]")
+            print(f"[{i+1}/{len(frames)}] SPACE=pause ←/→=skip q=quit")
             print(ascii_art)
 
-            # Sync to actual frame timing to prevent audio drift
+            # Sync to actual frame timing
             elapsed = time.time() - start_time
             expected_time = (i + 1) * frame_duration
             sleep_time = expected_time - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            i += 1
+
     except KeyboardInterrupt:
         print(f"\n{YELLOW}Playback stopped{RESET}")
     finally:
+        PLAYBACK['quit'] = True
         if audio_process:
             audio_process.terminate()
 
