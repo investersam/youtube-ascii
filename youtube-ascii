@@ -623,38 +623,18 @@ def main():
                             else:
                                 play_ascii_video(video)
             elif choice == 'h':
-                query = input(f"\n{YELLOW}Search Shorts (creator/topic): {RESET}").strip()
+                query = input(f"\n{YELLOW}Search Shorts: {RESET}").strip()
                 if query:
-                    # Search for shorts by using YouTube Shorts URL format
-                    print(f"\n{YELLOW}Fetching YouTube Shorts for: {query}...{RESET}\n")
-                    try:
-                        # Try to get shorts from channel
-                        result = subprocess.run(
-                            ['yt-dlp', '-j', '--max-downloads', '10', f'https://www.youtube.com/@{query}/shorts'],
-                            capture_output=True,
-                            text=True,
-                            timeout=30
-                        )
-
-                        if result.returncode == 0:
-                            videos = []
-                            for line in result.stdout.strip().split('\n'):
-                                if line:
-                                    try:
-                                        videos.append(json.loads(line))
-                                    except:
-                                        pass
-
-                            if videos:
-                                video = display_results(videos)
-                                if video:
-                                    play_ascii_video(video)
-                            else:
-                                print(f"{RED}No shorts found for @{query}{RESET}")
-                        else:
-                            print(f"{RED}Channel not found or has no shorts{RESET}")
-                    except Exception as e:
-                        print(f"{RED}Error: {e}{RESET}")
+                    # Search for shorts using ytsearch
+                    videos = search_youtube(f"ytsearch10:{query} shorts")
+                    if videos:
+                        # Show all results, user can pick vertical ones
+                        print(f"\n{YELLOW}(Tip: Vertical videos are Shorts){RESET}\n")
+                        video = display_results(videos)
+                        if video:
+                            play_ascii_video(video)
+                    else:
+                        print(f"{RED}No results found{RESET}")
             elif choice == 'a':
                 query = input(f"\n{YELLOW}Search YouTube: {RESET}").strip()
                 if query:
