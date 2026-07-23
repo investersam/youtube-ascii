@@ -626,7 +626,7 @@ def main():
                 query = input(f"\n{YELLOW}Search Shorts: {RESET}").strip()
                 if query:
                     # Search for shorts using ytsearch
-                    videos = search_youtube(f"ytsearch10:{query} shorts")
+                    videos = search_youtube(f"{query} shorts")
                     if videos:
                         # Show all results, user can pick vertical ones
                         print(f"\n{YELLOW}(Tip: Vertical videos are Shorts){RESET}\n")
